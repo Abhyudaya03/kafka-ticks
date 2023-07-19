@@ -1,3 +1,4 @@
+import logging
 from mimetypes import init
 import json
 from paho.mqtt import client as mqtt_client
@@ -5,6 +6,10 @@ from kafka_producer import KafkaProducerClass
 import threading
 
 token_set=set()
+
+# logging.basicConfig(
+#     level=logging.DEBUG
+# )
 
 class KickerClient():
 
@@ -32,9 +37,15 @@ class KickerClient():
         self.client.on_connect = on_connect
         self.client.connect(self.host, self.port)
         self.client.on_message = self.on_message
+        self.client.on_disconnect= self.on_disconnect
+        self.client.on_log=self.on_log
+        self.client.enable_logger()
 
     def start(self):
         self.client.loop_forever()
+
+    def on_log(self, userdata, level, buf):
+        logging.debug(f'MQTT log: {buf}')
 
     def subscribe(self, instrument_tokens:list):
         ##publishing instrument token on subscribe channel to trigger kite subscription at the server side
@@ -43,7 +54,9 @@ class KickerClient():
         }
         self.publish("subscribe",sub)
         for token in instrument_tokens:
-            self.client.subscribe(str(token))
+            if token not in token_set:
+                token_set.add(token)
+            self.client.subscribe(str(token), qos=0)
 
     def publish(self,topic,msg):
 
@@ -59,6 +72,9 @@ class KickerClient():
     def get_tokens(self):
         self.client.subscribe('subscribe')
 
+    def on_disconnect(self, client, userdata, rc):
+        print("disconnected",rc)
+
     def thread_kafka(self, msg):
         if(msg.topic=='subscribe'):
                 dict_data=json.loads(msg.payload.decode())
@@ -70,7 +86,11 @@ class KickerClient():
                 if(len(tokens_to_sub)>0):
                     self.subscribe(tokens_to_sub)
                 return
-        future=self.kproducer.producer.send(msg.topic, value=msg.payload.decode())
+        if(msg.topic=='test/throttled/tick-data'):
+            return
+        # print(msg.payload.decode(),msg.topic)
+        topic=msg.topic.replace("/",".")
+        future=self.kproducer.producer.send(topic, value=msg.payload.decode())
         result=future.get()
         print("kafka result",result)
         # self.ticks['topic']=msg.payload.decode()

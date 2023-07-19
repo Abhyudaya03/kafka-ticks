@@ -14,10 +14,10 @@ def delete_topics(topics):
 def get_all_topics():
     topics=admin_client.list_topics()
     topic_names = [topic for topic in topics]
-    # print(topic_names)
+    print(len(topic_names))
     return topic_names
 
 
 
-# delete_topics(get_all_topics())
+# delete_topics(['test'])
 # get_all_topics()
